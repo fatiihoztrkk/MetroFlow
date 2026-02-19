@@ -1,5 +1,14 @@
-# Runtime dependencies for metro_display
+# Python packages installed with pip
 # Recommended Python: 3.11+
 
 Pillow>=10.0,<12
 certifi>=2024.2.2
+
+# IMPORTANT: tkinter is NOT a pip package for CPython.
+# It must be installed from system packages:
+#
+# macOS (Homebrew Python 3.11):
+#   brew install python@3.11 python-tk@3.11
+#
+# Debian/Ubuntu/Raspberry Pi OS:
+#   sudo apt update && sudo apt install -y python3-tk

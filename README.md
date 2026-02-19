@@ -43,6 +43,10 @@ pip install -U pip
 pip install -r metro_display/requirements.txt
 ```
 
+Not:
+- `tkinter` pip ile kurulmaz; sistemden kurulur.
+- Ayrinti ve komutlar `metro_display/requirements.txt` icine eklendi.
+
 ## Calistirma
 
 Desktop dashboard (onerilen):
