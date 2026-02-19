@@ -108,6 +108,7 @@ Desktop UI (1024x600):
 - `DESKTOP_WIDTH` / `DESKTOP_HEIGHT`
 - `DESKTOP_FULLSCREEN`
 - `DESKTOP_FONT_FAMILY`
+- `DESKTOP_SHOW_TIME_AFTER_MINUTES` (`30` ise 31+ dk satirlarinda dakika yerine `HH:MM` gosterir)
 
 Terminal UI:
 - `TERMINAL_WIDTH`
