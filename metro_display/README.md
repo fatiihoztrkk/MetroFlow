@@ -1,46 +1,42 @@
-# Metro Display
+# metro_display
 
-Live-first metro board renderer used by this project.
+Canli metro panosu motoru (M4 + Marmaray + Ramazan paneli).
 
-## Run
-Terminal mode:
+## Modlar
+- `python -m metro_display.desktop`
+  - 1024x600 profesyonel dashboard UI
+  - Ana panellerde destination + dakika kolonlari
+- `python -m metro_display.terminal`
+  - terminal odakli gorunum
+- `python -m metro_display.app`
+  - PNG/E-Ink render (`metro_display/data/last.png`)
+
+## Gereksinimler
+- Python `3.11+`
+- `pip install -r metro_display/requirements.txt`
+- GUI icin `tkinter`:
+  - macOS: `brew install python-tk@3.11`
+  - Linux: `sudo apt install python3-tk`
+
+## Baslangic
 ```bash
-python3 -m metro_display.terminal
+source .venv/bin/activate
+python -m metro_display.desktop
 ```
 
-Image mode:
-```bash
-python3 -m metro_display.app
-```
+## Veri Akisi
+- M4: Metro Istanbul timetable endpoint
+- Marmaray: TCDD timetable endpoint
+- Ramazan: Aladhan timings endpoint
+- `LIVE_FALLBACK_TO_GTFS=True` ise canli hata durumunda GTFS fallback devrede kalir
 
-Output image path:
-```text
-metro_display/data/last.png
-```
+## Ana Ayarlar (`config.py`)
+- Genel: `STATION_NAME`, `TIMEZONE`, `REFRESH_SECONDS`
+- Canli/Fallback: `USE_LIVE_SOURCES`, `LIVE_FALLBACK_TO_GTFS`, `SHOW_STATUS_NOTE`
+- Ramazan: `SHOW_RAMADAN_PANEL`, `RAMADAN_TARGET_DATE`
+- Desktop: `DESKTOP_WIDTH`, `DESKTOP_HEIGHT`, `DESKTOP_FULLSCREEN`, `DESKTOP_FONT_FAMILY`
+- Terminal: `TERMINAL_WIDTH`, `TERMINAL_USE_UNICODE`
 
-## What it shows
-- Marmaray departure minutes (Avrupa / Anadolu)
-- M4 departure minutes (Kadikoy / Sabiha)
-- Optional Ramadan footer:
-  - imsak
-  - iftar
-  - remaining time
-
-## Config keys
-Edit `metro_display/config.py`:
-- `STATION_NAME`
-- `USE_LIVE_SOURCES`
-- `LIVE_FALLBACK_TO_GTFS`
-- `SHOW_STATUS_NOTE`
-- `M4_TIMETABLE_PAGE_URL` / `M4_TIMETABLE_AJAX_URL`
-- `MARMARAY_TIMETABLE_PAGE_URL` / `MARMARAY_API_URL`
-- `SHOW_RAMADAN_PANEL`
-- `RAMADAN_TARGET_DATE`
-- `RAMADAN_CITY` / `RAMADAN_COUNTRY` / `RAMADAN_METHOD`
-- `DISPLAY_DRIVER` (`png` / `waveshare`)
-- `SCREEN_WIDTH` / `SCREEN_HEIGHT`
-
-## Notes
-- Live sources are timetable APIs, not GPS delay feeds.
-- GTFS is fallback only when enabled.
-- If image render has Turkish glyph issues, set `FONT_PATH` to a TTF that supports Turkish.
+## Notlar
+- Bu paket `urllib` kullandigi icin `requests` gerekmez.
+- `tkinter` pip paketi degildir; sistemden kurulmalidir.

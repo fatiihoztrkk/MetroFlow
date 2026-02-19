@@ -335,7 +335,8 @@ def next_departures(
         ORDER BY st.arrival_secs
         LIMIT {fetch_limit}
     """
-    rows2 = query(conn, sql2, params[:-1])  # reuse same params without now_seconds
+    params2 = list(stop_ids) + list(route_ids) + list(service_ids)
+    rows2 = query(conn, sql2, params2)
     rows2 = _filter_headsign(rows2, headsign_keywords, direction_id)
     for r in rows2:
         minutes = int((r["arrival_secs"] + 24 * 3600 - now_seconds) / 60)

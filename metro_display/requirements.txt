@@ -1,2 +1,5 @@
-pillow
-certifi
+# Runtime dependencies for metro_display
+# Recommended Python: 3.11+
+
+Pillow>=10.0,<12
+certifi>=2024.2.2

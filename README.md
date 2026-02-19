@@ -1,112 +1,150 @@
 # AyrilikPano
 
-Live-first station-style display for Ayrilik Cesmesi:
-- Marmaray + M4 departure minutes
-- Optional GTFS fallback
-- Optional Ramadan footer (imsak / iftar + remaining time)
+Ayrilik Cesmesi icin canli metro panosu:
+- Marmaray + M4 kalan dakika
+- 1024x600 profesyonel desktop dashboard
+- Ramazan alt bar (imsak/iftar + kalan sure)
+- Canli kaynak hata verirse GTFS fallback
 
-Designed for Raspberry Pi and 7-inch screens (800x480).
+## Ozellikler
+- Canli veri:
+  - M4: Metro Istanbul sefer endpoint
+  - Marmaray: TCDD sefer endpoint
+- Ekran modlari:
+  - `terminal`: sade tablo gorunumu
+  - `desktop`: profesyonel dashboard (onerilen)
+  - `app`: PNG/E-Ink render
+- Ramazan paneli:
+  - Tarih, imsak, iftar, kalan sure
+  - API hatasinda kontrollu fallback
 
-## Current status
-- M4 source: Metro Istanbul live timetable endpoint
-- Marmaray source: TCDD live timetable endpoint
-- GTFS is used only as fallback when configured
-- Board note can hide old/expired GTFS text (`SHOW_STATUS_NOTE=False`)
-- Ramadan footer is rendered at the bottom of the same screen
+## Gereksinimler
+- Python `3.11+` (onerilen)
+- `pip`
+- Masaustu GUI icin `tkinter`
 
-## Quick start
+macOS (Homebrew Python) icin `tkinter`:
 ```bash
-python3 -m venv .venv
+brew install python@3.11 python-tk@3.11
+```
+
+Linux/Raspberry Pi icin `tkinter`:
+```bash
+sudo apt update
+sudo apt install -y python3-tk
+```
+
+## Kurulum
+```bash
+cd m4_marmaray_timeline
+python3.11 -m venv .venv
 source .venv/bin/activate
+pip install -U pip
 pip install -r metro_display/requirements.txt
-python3 -m metro_display.terminal
 ```
 
-Image render mode:
+## Calistirma
+
+Desktop dashboard (onerilen):
 ```bash
-python3 -m metro_display.app
+source .venv/bin/activate
+python -m metro_display.desktop
 ```
 
-Latest image output:
+Terminal:
+```bash
+source .venv/bin/activate
+python -m metro_display.terminal
+```
+
+PNG/E-Ink render:
+```bash
+source .venv/bin/activate
+python -m metro_display.app
+```
+
+PNG cikti yolu:
 ```text
 metro_display/data/last.png
 ```
 
-## Data sources
+## Kisa Kontroller
+- `F11`: fullscreen ac/kapat (desktop mod)
+- `Esc` veya `q`: cikis
+
+## Veri Kaynaklari
 - M4:
   - `https://www.metro.istanbul/SeferDurumlari/SeferDetaylari`
   - `https://www.metro.istanbul/SeferDurumlari/AJAXSeferGetir`
 - Marmaray:
   - `https://www.tcddtasimacilik.gov.tr/marmaray/tr/gunluk_tren_saatleri`
   - `https://api.tcddtasimacilik.gov.tr/api/SubPages/GetTransportationTrainsGroupwithHours?marmaray=true`
-- Ramadan timings:
+- Ramazan:
   - `https://api.aladhan.com/v1/timingsByCity`
 
-## Configuration
-Edit `metro_display/config.py`.
+## Konfigurasyon
+Tum ayarlar: `metro_display/config.py`
 
-Core:
+Temel:
 - `STATION_NAME`
+- `TIMEZONE`
 - `REFRESH_SECONDS`
 - `DEPARTURES_PER_DIRECTION`
 - `LOOKAHEAD_MINUTES`
-- `TIMEZONE`
 
-Live/fallback:
+Canli/Fallback:
 - `USE_LIVE_SOURCES`
 - `LIVE_FALLBACK_TO_GTFS`
 - `SHOW_STATUS_NOTE`
 - `ALLOW_CALENDAR_FALLBACK`
 - `CALENDAR_FALLBACK_DAYS`
 
-Line and stop mapping:
-- `LINES`
-  - Marmaray fixed stop_id: `12258`
-  - M4 fixed stop_id: `94911`
-
-Display:
-- `DISPLAY_DRIVER` (`png` or `waveshare`)
-- `SCREEN_WIDTH` / `SCREEN_HEIGHT` (default `800x480`)
-- `TERMINAL_WIDTH` / `TERMINAL_LABEL_WIDTH`
-- `FONT_PATH` (recommended for Turkish characters on image render)
-
-Ramadan footer:
+Ramazan:
 - `SHOW_RAMADAN_PANEL`
-- `RAMADAN_CITY`
-- `RAMADAN_COUNTRY`
-- `RAMADAN_METHOD`
 - `RAMADAN_TARGET_DATE`
-  - `YYYY-MM-DD` -> fixed day (example: `2026-02-20`)
-  - empty string -> auto use today
+- `RAMADAN_CITY` / `RAMADAN_COUNTRY` / `RAMADAN_METHOD`
 
-## 7-inch usage
-For 7-inch HDMI terminal:
-- keep `SCREEN_WIDTH = 800`, `SCREEN_HEIGHT = 480`
-- run terminal full screen
-- tune `TERMINAL_WIDTH` (for example `92`)
+Desktop UI (1024x600):
+- `DESKTOP_WIDTH` / `DESKTOP_HEIGHT`
+- `DESKTOP_FULLSCREEN`
+- `DESKTOP_FONT_FAMILY`
 
-For 7-inch e-ink:
-- set `DISPLAY_DRIVER = "waveshare"`
-- run `python3 -m metro_display.app`
+Terminal UI:
+- `TERMINAL_WIDTH`
+- `TERMINAL_LABEL_WIDTH`
+- `TERMINAL_USE_UNICODE`
+- `TERMINAL_SECTION_PADDING`
 
-## Notes on reliability
-- Live sources are timetable-based, not vehicle GPS delay data.
-- If a live source fails and GTFS fallback is enabled, departures still render from local GTFS.
-- If fallback data is old but you do not want warning text, keep `SHOW_STATUS_NOTE=False`.
-- Ramadan footer has API fallback behavior and can show `veri alinamadi` on fetch errors.
+## SSS / Sorun Giderme
 
-## Maintenance
-Force GTFS refresh:
+`ModuleNotFoundError: No module named '_tkinter'`
+- `python-tk` kur:
+  - macOS: `brew install python-tk@3.11`
+  - Linux: `sudo apt install python3-tk`
+- Sonra `.venv` ile calistir:
 ```bash
-rm -f metro_display/data/gtfs.zip
-python3 -m metro_display.terminal
+source .venv/bin/activate
+python -m metro_display.desktop
 ```
 
-## Project layout
-- `metro_display/app.py`: main loop and model builder
-- `metro_display/live_sources.py`: M4 + Marmaray live providers
-- `metro_display/ramadan.py`: imsak/iftar footer module
-- `metro_display/render/`: image rendering
-- `metro_display/terminal.py`: terminal board output
-- `metro_display/gtfs/`: GTFS download/import
-- `metro_display/systemd/`: service example
+`PIL` hatasi:
+```bash
+source .venv/bin/activate
+pip install -r metro_display/requirements.txt
+```
+
+GTFS cache sifirlama:
+```bash
+rm -f metro_display/data/gtfs.zip
+source .venv/bin/activate
+python -m metro_display.terminal
+```
+
+## Proje Yapisi
+- `metro_display/app.py`: model uretimi ve ana dongu
+- `metro_display/live_sources.py`: canli M4/Marmaray toplayici
+- `metro_display/ramadan.py`: imsak/iftar panel verisi
+- `metro_display/desktop.py`: 1024x600 dashboard UI
+- `metro_display/terminal.py`: terminal UI
+- `metro_display/render/`: PNG/E-Ink cizim
+- `metro_display/gtfs/`: GTFS indirme/import
