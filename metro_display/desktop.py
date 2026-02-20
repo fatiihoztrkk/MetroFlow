@@ -1,5 +1,6 @@
 """Desktop dashboard UI (1024x600) with station-sign look."""
 import re
+import threading
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -42,6 +43,29 @@ RAM_ACCENT = "#ffd35a"
 
 def _safe_text(value: str) -> str:
     return value or ""
+
+
+def _clamp(value: int, low: int, high: int) -> int:
+    return max(low, min(high, value))
+
+
+def _trim_text(text: str, max_len: int) -> str:
+    if max_len <= 0:
+        return ""
+    if len(text) <= max_len:
+        return text
+    if max_len <= 3:
+        return text[:max_len]
+    return text[: max_len - 3] + "..."
+
+
+def _fit_font_for_width(text: str, max_px: int, preferred: int, minimum: int) -> int:
+    if max_px <= 0:
+        return minimum
+    chars = max(1, len(text or ""))
+    # Approximate width factor for bold digital glyphs in Tk.
+    width_bound = int(max_px / (chars * 0.62))
+    return _clamp(min(preferred, width_bound), minimum, preferred)
 
 
 def _hex_to_rgb(value: str) -> Tuple[int, int, int]:
@@ -176,6 +200,14 @@ def _minute_color(label: str, minute_base: str, is_next_day: bool = False) -> st
     return minute_base
 
 
+def _eta_display_text(label: str) -> str:
+    if label == "--":
+        return "--"
+    if label.isdigit():
+        return f"{int(label)} dk"
+    return label
+
+
 def _row_indicator_color(row: Dict[str, object], accent: str) -> str:
     if bool(row.get("first_next_day")):
         return CYAN
@@ -225,7 +257,7 @@ class DesktopBoard:
         self.root.title("AyrilikPano")
         self.root.configure(bg=config.DESKTOP_BG_COLOR)
         self.root.geometry(f"{config.DESKTOP_WIDTH}x{config.DESKTOP_HEIGHT}")
-        self.root.minsize(960, 540)
+        self.root.minsize(min(640, config.DESKTOP_WIDTH), min(360, config.DESKTOP_HEIGHT))
         self.root.bind("<Escape>", lambda _e: self.root.destroy())
         self.root.bind("q", lambda _e: self.root.destroy())
         self.root.bind("<F11>", self._toggle_fullscreen)
@@ -247,6 +279,7 @@ class DesktopBoard:
             note="Yukleniyor...",
             footer_lines=[],
         )
+        self._refresh_inflight = False
 
     def _toggle_fullscreen(self, _event=None):
         current = bool(self.root.attributes("-fullscreen"))
@@ -264,65 +297,40 @@ class DesktopBoard:
             self.canvas.create_line(0, y, width, y, fill=color)
 
     def _draw_shell(self, width: int, height: int) -> Tuple[int, int, int, int]:
-        margin = 26
+        margin = _clamp(int(min(width, height) * 0.022), 10, 24)
         self.canvas.create_rectangle(
             margin,
             margin,
             width - margin,
             height - margin,
             fill=SHELL_OUTER,
-            outline="#2b313d",
+            outline="#2f3b50",
             width=2,
         )
 
-        inset = margin + 12
+        inset = margin + _clamp(int(min(width, height) * 0.012), 6, 10)
         self.canvas.create_rectangle(
             inset,
             inset,
             width - inset,
             height - inset,
             fill=SHELL_INNER,
-            outline="#556078",
+            outline="#445577",
             width=1,
         )
-
-        self.canvas.create_polygon(
-            width - inset - 240,
-            inset + 20,
-            width - inset - 40,
-            inset + 20,
-            width - inset - 90,
-            height - inset - 20,
-            width - inset - 300,
-            height - inset - 20,
-            fill="#253045",
-            outline="",
-            smooth=True,
-        )
-        self.canvas.create_polygon(
-            inset + 50,
-            inset + 10,
-            inset + 320,
-            inset + 10,
-            inset + 190,
-            height - inset - 10,
-            inset - 20,
-            height - inset - 10,
-            fill="#2a3244",
-            outline="",
-            smooth=True,
-        )
-        self.canvas.create_line(inset + 8, inset + 8, width - inset - 8, inset + 8, fill="#7f8ea8", width=1)
-        return (inset + 12, inset + 10, width - inset - 12, height - inset - 10)
+        return (inset + 10, inset + 8, width - inset - 10, height - inset - 8)
 
     def _draw_header(self, x0: int, y0: int, x1: int) -> int:
+        width = x1 - x0
+        station_font = _clamp(int(width * 0.012), 10, 15)
+        clock_font = _clamp(int(width * 0.038), 22, 40)
         self.canvas.create_text(
             x0 + 8,
             y0 + 26,
             anchor="w",
             text=self.model.title,
             fill=TEXT_SOFT,
-            font=self._font(15, "bold"),
+            font=self._font(station_font, "bold"),
         )
         clock = self.model.updated_at.strftime("%H:%M")
         self.canvas.create_text(
@@ -331,7 +339,7 @@ class DesktopBoard:
             anchor="e",
             text=clock,
             fill="#0f1118",
-            font=self._font(42, "bold"),
+            font=self._font(clock_font, "bold"),
         )
         self.canvas.create_text(
             x1 - 8,
@@ -339,59 +347,84 @@ class DesktopBoard:
             anchor="e",
             text=clock,
             fill=TEXT_MAIN,
-            font=self._font(42, "bold"),
+            font=self._font(clock_font, "bold"),
         )
-        return y0 + 58
+        return y0 + _clamp(int(clock_font * 1.22), 48, 62)
 
     def _draw_line_panel(self, x0: int, y0: int, x1: int, h: int, line: LineBlock):
         accent, minute_base = _line_theme(line.name)
-        rows = _line_rows(line)
+        rows = _line_rows(line)[:2]
+        if not rows:
+            rows = [
+                {"dest": "--", "cells": ["--", "--"], "next_day_flags": [False, False], "first_minutes": None, "first_next_day": False},
+                {"dest": "--", "cells": ["--", "--"], "next_day_flags": [False, False], "first_minutes": None, "first_next_day": False},
+            ]
         panel_w = x1 - x0
         y1 = y0 + h
 
-        self.canvas.create_rectangle(x0 + 3, y0 + 4, x1 + 3, y1 + 4, fill="#121722", outline="", width=0)
         self.canvas.create_rectangle(x0, y0, x1, y1, fill=PANEL_FILL, outline=PANEL_BORDER, width=1)
-        left_w = int(panel_w * 0.62)
+
+        if panel_w < 700:
+            left_ratio = 0.52
+        elif panel_w < 820:
+            left_ratio = 0.55
+        elif panel_w < 980:
+            left_ratio = 0.59
+        else:
+            left_ratio = 0.62
+        left_w = int(panel_w * left_ratio)
         left_x1 = x0 + left_w
+
+        header_h = _clamp(int(h * 0.30), 48, 70)
+        title_font = _clamp(int(header_h * 0.46), 18, 30)
+        header_meta_font = _clamp(int(header_h * 0.22), 9, 14)
 
         self.canvas.create_text(
             x0 + 18,
-            y0 + 30,
+            y0 + int(header_h * 0.38),
             anchor="w",
-            text=_line_title(line.name),
+            text=_trim_text(_line_title(line.name), 22 if panel_w > 850 else 18),
             fill=TEXT_MAIN,
-            font=self._font(33 if "m4" not in line.name.lower() else 30, "bold"),
+            font=self._font(title_font, "bold"),
         )
 
         self.canvas.create_text(
             x0 + 20,
-            y0 + 62,
+            y0 + header_h - 12,
             anchor="w",
             text="DESTINATION",
             fill=TEXT_MUTED,
-            font=self._font(16, "bold"),
+            font=self._font(header_meta_font, "bold"),
         )
-        self.canvas.create_line(x0 + 16, y0 + 74, left_x1 - 16, y0 + 74, fill=PANEL_DIVIDER, width=1)
+        self.canvas.create_line(x0 + 16, y0 + header_h, left_x1 - 16, y0 + header_h, fill=PANEL_DIVIDER, width=1)
         self.canvas.create_line(left_x1, y0 + 14, left_x1, y1 - 14, fill=PANEL_DIVIDER, width=1)
 
         right_w = panel_w - left_w
         right_x0 = left_x1
+        use_two_columns = right_w >= 300
+        eta_header = "MINUTES AWAY" if use_two_columns else "ETA"
         self.canvas.create_text(
             right_x0 + right_w / 2,
-            y0 + 62,
+            y0 + header_h - 12,
             anchor="center",
-            text="MINUTES AWAY",
+            text=eta_header,
             fill=minute_base,
-            font=self._font(16, "bold"),
+            font=self._font(header_meta_font, "bold"),
         )
-        self.canvas.create_line(right_x0 + 16, y0 + 74, x1 - 16, y0 + 74, fill=PANEL_DIVIDER, width=1)
+        self.canvas.create_line(right_x0 + 16, y0 + header_h, x1 - 16, y0 + header_h, fill=PANEL_DIVIDER, width=1)
 
-        row_top = y0 + 98
-        row_bottom = y1 - 18
+        row_top = y0 + header_h + 10
+        row_bottom = y1 - 10
         count = max(1, len(rows))
         row_step = (row_bottom - row_top) / float(count)
 
-        col1 = int(right_x0 + right_w * 0.35)
+        dest_font = _clamp(int(row_step * 0.37), 13, 24)
+        minute_pref = _clamp(int(row_step * 0.40), 14, 26)
+        time_pref = _clamp(minute_pref - 3, 12, 22)
+        indicator_outer = _clamp(int(row_step * 0.13), 6, 10)
+        indicator_inner = _clamp(indicator_outer - 3, 2, 5)
+
+        col1 = int(right_x0 + right_w * 0.33)
         col2 = int(right_x0 + right_w * 0.75)
 
         for idx, row in enumerate(rows):
@@ -400,16 +433,33 @@ class DesktopBoard:
             dest_color = accent if idx == 0 else TEXT_MAIN
 
             indicator = _row_indicator_color(row, accent)
-            self.canvas.create_oval(x0 + 18, y_mid - 8, x0 + 34, y_mid + 8, outline=indicator, fill="", width=1)
-            self.canvas.create_oval(x0 + 22, y_mid - 4, x0 + 30, y_mid + 4, outline="", fill=indicator)
+            self.canvas.create_oval(
+                x0 + 18,
+                y_mid - indicator_outer,
+                x0 + 18 + indicator_outer * 2,
+                y_mid + indicator_outer,
+                outline=indicator,
+                fill="",
+                width=1,
+            )
+            self.canvas.create_oval(
+                x0 + 18 + (indicator_outer - indicator_inner),
+                y_mid - indicator_inner,
+                x0 + 18 + (indicator_outer - indicator_inner) + indicator_inner * 2,
+                y_mid + indicator_inner,
+                outline="",
+                fill=indicator,
+            )
 
+            left_text_px = max(90, left_w - (34 + indicator_outer * 2) - 22)
+            dest_char_budget = max(8, int(left_text_px / max(7.0, dest_font * 0.53)))
             self.canvas.create_text(
-                x0 + 40,
+                x0 + 26 + indicator_outer * 2,
                 y_mid,
                 anchor="w",
-                text=dest,
+                text=_trim_text(dest, dest_char_budget),
                 fill=dest_color,
-                font=self._font(34, "normal"),
+                font=self._font(dest_font, "normal"),
             )
 
             mins: List[str] = row["cells"]  # type: ignore[assignment]
@@ -418,23 +468,43 @@ class DesktopBoard:
             m2 = mins[1] if len(mins) > 1 else "--"
             f1 = bool(next_day_flags[0]) if len(next_day_flags) > 0 else False
             f2 = bool(next_day_flags[1]) if len(next_day_flags) > 1 else False
-
-            self.canvas.create_text(
-                col1,
-                y_mid,
-                anchor="center",
-                text=m1,
-                fill=_minute_color(m1, minute_base, f1),
-                font=self._font(40, "bold"),
-            )
-            self.canvas.create_text(
-                col2,
-                y_mid,
-                anchor="center",
-                text=m2,
-                fill=_minute_color(m2, minute_base, f2),
-                font=self._font(40, "bold"),
-            )
+            eta1 = _eta_display_text(m1)
+            eta2 = _eta_display_text(m2)
+            if use_two_columns:
+                col_max_px = max(72, int(right_w * 0.34))
+                m1_pref = time_pref if ":" in eta1 else minute_pref
+                m2_pref = time_pref if ":" in eta2 else minute_pref
+                m1_font = _fit_font_for_width(eta1, col_max_px, m1_pref, 11)
+                m2_font = _fit_font_for_width(eta2, col_max_px, m2_pref, 11)
+                self.canvas.create_text(
+                    col1,
+                    y_mid,
+                    anchor="center",
+                    text=eta1,
+                    fill=_minute_color(m1, minute_base, f1),
+                    font=self._font(m1_font, "bold"),
+                )
+                self.canvas.create_text(
+                    col2,
+                    y_mid,
+                    anchor="center",
+                    text=eta2,
+                    fill=_minute_color(m2, minute_base, f2),
+                    font=self._font(m2_font, "bold"),
+                )
+            else:
+                combo = eta1 if eta2 == "--" else f"{eta1} | {eta2}"
+                combo_pref = minute_pref if ":" not in combo else time_pref
+                combo_font = _fit_font_for_width(combo, max(120, int(right_w * 0.8)), combo_pref, 11)
+                combo_color = _minute_color(m1, minute_base, f1) if m1 != "--" else _minute_color(m2, minute_base, f2)
+                self.canvas.create_text(
+                    right_x0 + right_w / 2,
+                    y_mid,
+                    anchor="center",
+                    text=combo,
+                    fill=combo_color,
+                    font=self._font(combo_font, "bold"),
+                )
 
     def _draw_crescent(self, cx: int, cy: int, radius: int):
         self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill=RAM_ACCENT, outline="")
@@ -453,50 +523,75 @@ class DesktopBoard:
         bar_w = x1 - x0
         self.canvas.create_rectangle(x0, y0, x1, y1, fill=RAM_BG, outline=RAM_BORDER, width=1)
         self._draw_crescent(x0 + 24, y0 + h // 2, 11)
+        if bar_w < 760:
+            title_font = _clamp(int(h * 0.24), 10, 16)
+            value_font = _clamp(int(h * 0.23), 10, 14)
+            self.canvas.create_text(
+                x0 + 44,
+                y0 + int(h * 0.34),
+                anchor="w",
+                text=f"🕌 {_trim_text(ram['title'], 34)}",
+                fill=RAM_TEXT,
+                font=self._font(title_font, "normal"),
+            )
+            compact = f"Imsak {ram['imsak_time']} ({ram['imsak_left']})   Iftar {ram['iftar_time']} ({ram['iftar_left']})"
+            self.canvas.create_text(
+                x0 + 44,
+                y0 + int(h * 0.72),
+                anchor="w",
+                text=_trim_text(compact, 68),
+                fill=RAM_ACCENT,
+                font=self._font(value_font, "bold"),
+            )
+            return
+
+        title_font = _clamp(int(h * 0.27), 12, 18)
+        label_font = _clamp(int(h * 0.20), 10, 14)
+        value_font = _clamp(int(h * 0.24), 11, 16)
 
         self.canvas.create_text(
             x0 + 44,
             y0 + h // 2,
             anchor="w",
-            text=f"🕌 {ram['title']}",
+            text=f"🕌 {_trim_text(ram['title'], 42)}",
             fill=RAM_TEXT,
-            font=self._font(20, "normal"),
+            font=self._font(title_font, "normal"),
         )
 
-        info_x = x0 + int(bar_w * 0.53)
+        info_x = x0 + int(bar_w * 0.50)
         self.canvas.create_text(
             info_x,
             y0 + 18,
             anchor="w",
             text="SAHUR / IMSAK",
             fill=RAM_TITLE,
-            font=self._font(15, "bold"),
+            font=self._font(label_font, "bold"),
         )
         self.canvas.create_text(
             info_x,
-            y0 + h - 22,
+            y0 + h - 20,
             anchor="w",
-            text=f"{ram['imsak_time']}    Kalan: {ram['imsak_left']}",
+            text=f"{ram['imsak_time']}  Kalan {ram['imsak_left']}",
             fill=RAM_TEXT,
-            font=self._font(18, "bold"),
+            font=self._font(value_font, "bold"),
         )
 
-        iftar_x = x0 + int(bar_w * 0.77)
+        iftar_x = x0 + int(bar_w * 0.76)
         self.canvas.create_text(
             iftar_x,
             y0 + 18,
             anchor="w",
             text="IFTAR",
             fill=RAM_ACCENT,
-            font=self._font(15, "bold"),
+            font=self._font(label_font, "bold"),
         )
         self.canvas.create_text(
             iftar_x,
-            y0 + h - 22,
+            y0 + h - 20,
             anchor="w",
-            text=f"{ram['iftar_time']}    Kalan: {ram['iftar_left']}",
+            text=f"{ram['iftar_time']}  Kalan {ram['iftar_left']}",
             fill=RAM_ACCENT,
-            font=self._font(18, "bold"),
+            font=self._font(value_font, "bold"),
         )
 
     def _draw(self):
@@ -512,10 +607,10 @@ class DesktopBoard:
         header_bottom = self._draw_header(x0, y0, x1)
         inner_h = y1 - header_bottom
         show_ramadan = config.SHOW_RAMADAN_PANEL and bool(self.model.footer_lines)
-        footer_h = 72 if show_ramadan else 0
-        cards_gap = 12 if show_ramadan else 0
-        cards_h = inner_h - footer_h - cards_gap - 8
-        card_h = int(cards_h / 2)
+        footer_h = _clamp(int(inner_h * 0.14), 58, 78) if show_ramadan else 0
+        cards_gap = _clamp(int(inner_h * 0.022), 8, 14)
+        cards_total = max(120, inner_h - footer_h - (cards_gap if show_ramadan else 0))
+        card_h = max(90, int((cards_total - cards_gap) / 2))
         panel_w = x1 - x0
 
         lines = self.model.lines[:2]
@@ -530,7 +625,7 @@ class DesktopBoard:
             ram_y = y1 - footer_h
             self._draw_ramadan_bar(x0, ram_y, x1, footer_h)
 
-        if self.model.note:
+        if self.model.note and getattr(config, "SHOW_STATUS_NOTE", False):
             self.canvas.create_text(
                 x1 - 6,
                 y1 - 4,
@@ -540,24 +635,50 @@ class DesktopBoard:
                 font=self._font(11, "normal"),
             )
 
-    def _refresh_model(self):
+    def _safe_after(self, fn, *args):
+        try:
+            self.root.after(0, fn, *args)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _refresh_model_worker(self):
         try:
             with get_connection() as conn:
-                self.model = app._build_model(conn)
+                model = app._build_model(conn)
+            self._safe_after(self._refresh_success, model)
         except Exception as err:  # noqa: BLE001
-            self.model = ScreenModel(
-                title=config.STATION_NAME.upper(),
-                updated_at=datetime.now(),
-                lines=[],
-                note=f"Hata: {err}",
-                footer_lines=[],
-            )
+            self._safe_after(self._refresh_error, err)
+        finally:
+            self._safe_after(self._refresh_done)
+
+    def _refresh_success(self, model: ScreenModel):
+        self.model = model
         self._draw()
-        self.root.after(config.REFRESH_SECONDS * 1000, self._refresh_model)
+
+    def _refresh_error(self, err: Exception):
+        self.model = ScreenModel(
+            title=config.STATION_NAME.upper(),
+            updated_at=datetime.now(),
+            lines=self.model.lines,
+            note=f"Hata: {err}",
+            footer_lines=self.model.footer_lines,
+        )
+        self._draw()
+
+    def _refresh_done(self):
+        self._refresh_inflight = False
+
+    def _refresh_tick(self):
+        if not self._refresh_inflight:
+            self._refresh_inflight = True
+            worker = threading.Thread(target=self._refresh_model_worker, daemon=True)
+            worker.start()
+        self.root.after(max(5, int(config.REFRESH_SECONDS)) * 1000, self._refresh_tick)
 
     def run(self):
         app._ensure_db()
-        self._refresh_model()
+        self._draw()
+        self._refresh_tick()
         self.root.mainloop()
 
 

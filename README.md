@@ -55,6 +55,15 @@ source .venv/bin/activate
 python -m metro_display.desktop
 ```
 
+Raspberry Pi (X oturumu acikken) dogrudan acilis:
+```bash
+cd /home/yusuf/Desktop/m4_marmaray_timeline
+source .venv/bin/activate
+export DISPLAY=:0
+export XAUTHORITY=/home/yusuf/.Xauthority
+PYTHONPATH="$(pwd)" .venv/bin/python -m metro_display.desktop
+```
+
 Terminal:
 ```bash
 source .venv/bin/activate
@@ -136,6 +145,13 @@ python -m metro_display.desktop
 ```bash
 source .venv/bin/activate
 pip install -r metro_display/requirements.txt
+```
+
+`No module named metro_display.desktop`
+- Proje kokunden calistir: `cd /home/yusuf/Desktop/m4_marmaray_timeline`
+- Paket gorunurlugunu dogrula:
+```bash
+PYTHONPATH="$(pwd)" .venv/bin/python -c "import metro_display.desktop; print('ok')"
 ```
 
 GTFS cache sifirlama:

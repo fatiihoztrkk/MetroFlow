@@ -255,7 +255,8 @@ def _extract_tcdd_token() -> Optional[str]:
     if not script_match:
         return None
     script_url = urllib.parse.urljoin(config.MARMARAY_TIMETABLE_PAGE_URL, script_match.group(1))
-    script_body = _http_get_text(script_url, timeout=max(config.LIVE_TIMEOUT_SECONDS, 30))
+    script_timeout = max(6, int(config.LIVE_TIMEOUT_SECONDS) + 2)
+    script_body = _http_get_text(script_url, timeout=script_timeout)
     token_match = re.search(r'getAuthToken\(\)\{return"([^"]+)"\}', script_body)
     if not token_match:
         return None

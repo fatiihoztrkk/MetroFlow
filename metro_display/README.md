@@ -24,6 +24,15 @@ source .venv/bin/activate
 python -m metro_display.desktop
 ```
 
+Raspberry Pi:
+```bash
+cd /home/yusuf/Desktop/m4_marmaray_timeline
+source .venv/bin/activate
+export DISPLAY=:0
+export XAUTHORITY=/home/yusuf/.Xauthority
+PYTHONPATH="$(pwd)" .venv/bin/python -m metro_display.desktop
+```
+
 ## Veri Akisi
 - M4: Metro Istanbul timetable endpoint
 - Marmaray: TCDD timetable endpoint
