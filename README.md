@@ -1,172 +1,202 @@
 # AyrilikPano
 
-Ayrilik Cesmesi icin canli metro panosu:
-- Marmaray + M4 kalan dakika
-- 1024x600 profesyonel desktop dashboard
-- Ramazan alt bar (imsak/iftar + kalan sure)
-- Canli kaynak hata verirse GTFS fallback
+## 🚀 Proje Hakkında
+Ayrılık Çeşmesi gibi kritik aktarma noktalarında kullanılmak üzere geliştirilmiş gerçek zamanlı bir ulaşım panosudur.  
+Python tabanlıdır ve M4 / Marmaray canlı kaynaklarını kullanır; canlı veri alınamazsa GTFS fallback ile çalışmayı sürdürür.
 
-## Ozellikler
-- Canli veri:
-  - M4: Metro Istanbul sefer endpoint
-  - Marmaray: TCDD sefer endpoint
-- Ekran modlari:
-  - `terminal`: sade tablo gorunumu
-  - `desktop`: profesyonel dashboard (onerilen)
-  - `app`: PNG/E-Ink render
-- Ramazan paneli:
-  - Tarih, imsak, iftar, kalan sure
-  - API hatasinda kontrollu fallback
+## Özellikler
+- M4 ve Marmaray için yaklaşan sefer süreleri
+- 1024x600 kiosk odaklı desktop ekran (`metro_display.desktop`)
+- Terminal görünümü (`metro_display.terminal`)
+- PNG/E-Ink render modu (`metro_display.app`)
+- Ramazan alt barı (imsak / iftar + kalan süre)
 
-## Gereksinimler
-- Python `3.11+` (onerilen)
-- `pip`
-- Masaustu GUI icin `tkinter`
+## 🛠️ Özelleştirme (M3 veya Başka Duraklar İçin)
 
-macOS (Homebrew Python) icin `tkinter`:
-```bash
-brew install python@3.11 python-tk@3.11
+### 1) Durak Seçimi (`station_id` / `stop_id`)
+Ana ayarlar `metro_display/config.py` dosyasındadır.
+
+- Genel durak adı: `STATION_NAME`
+- Hat bazlı sabit duraklar: `LINES[*].stop_ids`
+- Hat filtreleri: `LINES[*].route_keywords`, `LINES[*].directions[*].headsign_keywords`
+
+Örnek (M3 gibi başka bir hat eklemek için):
+
+```python
+LINES = [
+    {
+        "name": "M3",
+        "route_keywords": ["M3"],
+        "stop_ids": ["BURAYA_STOP_ID"],
+        "directions": [
+            {"label": "Kirazli", "headsign_keywords": ["Kirazli"]},
+            {"label": "Basin Ekspres", "headsign_keywords": ["Basin"]},
+        ],
+    },
+]
 ```
 
-Linux/Raspberry Pi icin `tkinter`:
+Yerel GTFS veritabanından `stop_id` bulma örneği:
+
+```bash
+sqlite3 metro_display/data/gtfs.sqlite3 "SELECT stop_id, stop_name FROM stops WHERE lower(stop_name) LIKE '%kirazli%';"
+```
+
+### 2) API Kaynağı
+Proje şu kaynakları kullanır:
+
+- M4 canlı: `https://www.metro.istanbul/SeferDurumlari/SeferDetaylari` ve `https://www.metro.istanbul/SeferDurumlari/AJAXSeferGetir`
+- Marmaray canlı: `https://www.tcddtasimacilik.gov.tr/marmaray/tr/gunluk_tren_saatleri` ve `https://api.tcddtasimacilik.gov.tr/api/SubPages/GetTransportationTrainsGroupwithHours?marmaray=true`
+- GTFS fallback: `CKAN_BASE_URL` + `CKAN_DATASET_ID` (varsayılan: B40/İBB GTFS)
+- Ramazan: `https://api.aladhan.com/v1/timingsByCity`
+
+Farklı hatlara uyarlarken önce ilgili canlı endpoint var mı kontrol et; yoksa GTFS ile çalıştır.
+
+## GTFS Teknik Notu
+GTFS (General Transit Feed Specification), toplu taşıma verilerinin (duraklar, güzergahlar, saatler) ortak bir formatta paylaşılmasını sağlayan küresel bir standarttır ve Google tarafından başlatılmıştır.  
+Bu projede GTFS verisini canlı kaynaklarla birlikte kullanarak statik tarife + anlık veri yaklaşımı kurulmuştur. Bu yapı, büyük ulaşım veri setlerini gerçek zamanlı işleme tarafında güçlü bir temel sağlar.
+
+### Diğer Hatlara Uyarlama
+Bu proje GTFS standartlarını kullandığı için, `config.py` içindeki durak (`Station/Stop ID`) ve hat bilgilerini değiştirerek projeyi herhangi bir İstanbul metrosuna veya Marmaray durağına kısa sürede uyarlayabilirsiniz.
+
+## 📦 Kurulum ve Çalıştırma
+
+### Gereksinimler
+- Python `3.11+`
+- `tkinter` (pip paketi değildir)
+
+Linux / Raspberry Pi:
+
 ```bash
 sudo apt update
-sudo apt install -y python3-tk
+sudo apt install -y python3-full python3-venv python3-tk
 ```
 
-## Kurulum
+### Sanal Ortam
+
 ```bash
 cd m4_marmaray_timeline
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -U pip
-pip install -r metro_display/requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r metro_display/requirements.txt
 ```
 
-Not:
-- `tkinter` pip ile kurulmaz; sistemden kurulur.
-- Ayrinti ve komutlar `metro_display/requirements.txt` icine eklendi.
+### Çalıştırma
 
-## Calistirma
+Desktop (önerilen):
 
-Desktop dashboard (onerilen):
 ```bash
-source .venv/bin/activate
 python -m metro_display.desktop
 ```
 
-Raspberry Pi (X oturumu acikken) dogrudan acilis:
+Terminal:
+
+```bash
+python -m metro_display.terminal
+```
+
+PNG/E-Ink:
+
+```bash
+python -m metro_display.app
+```
+
+## Raspberry Pi Kiosk Modu
+
+### Manuel kiosk açılış
+
 ```bash
 cd /home/yusuf/Desktop/m4_marmaray_timeline
 source .venv/bin/activate
 export DISPLAY=:0
 export XAUTHORITY=/home/yusuf/.Xauthority
-PYTHONPATH="$(pwd)" .venv/bin/python -m metro_display.desktop
+PYTHONPATH="$PWD" python -m metro_display.desktop
 ```
 
-Terminal:
+Desktop modu kiosk davranışı içerir:
+- Tam ekran + başlıksız pencere
+- Fare gizleme
+- `Esc`: fullscreen çıkış
+- `q`: uygulamayı kapatma
+
+### Autostart (systemd)
+Repo içinde örnek service: `metro_display/systemd/metro-display.service`
+
+1. Servisi sisteme kopyala:
+
 ```bash
-source .venv/bin/activate
-python -m metro_display.terminal
+sudo cp metro_display/systemd/metro-display.service /etc/systemd/system/metro-display.service
 ```
 
-PNG/E-Ink render:
+2. Servis dosyasında `User`, `WorkingDirectory`, `ExecStart` yollarını kendi ortama göre güncelle.
+
+Örnek kiosk servis:
+
+```ini
+[Unit]
+Description=Metro Display Desktop
+After=graphical.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yusuf
+WorkingDirectory=/home/yusuf/Desktop/m4_marmaray_timeline
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/yusuf/.Xauthority
+Environment=PYTHONPATH=/home/yusuf/Desktop/m4_marmaray_timeline
+ExecStart=/home/yusuf/Desktop/m4_marmaray_timeline/.venv/bin/python -m metro_display.desktop
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
+```
+
+3. Etkinleştir:
+
 ```bash
-source .venv/bin/activate
-python -m metro_display.app
+sudo systemctl daemon-reload
+sudo systemctl enable --now metro-display.service
+sudo systemctl status metro-display.service
 ```
 
-PNG cikti yolu:
-```text
-metro_display/data/last.png
-```
+Log takibi:
 
-## Kisa Kontroller
-- `F11`: fullscreen ac/kapat (desktop mod)
-- `Esc`: kiosk/tam ekrandan cik
-- `q`: uygulamayi kapat
-
-## Veri Kaynaklari
-- M4:
-  - `https://www.metro.istanbul/SeferDurumlari/SeferDetaylari`
-  - `https://www.metro.istanbul/SeferDurumlari/AJAXSeferGetir`
-- Marmaray:
-  - `https://www.tcddtasimacilik.gov.tr/marmaray/tr/gunluk_tren_saatleri`
-  - `https://api.tcddtasimacilik.gov.tr/api/SubPages/GetTransportationTrainsGroupwithHours?marmaray=true`
-- Ramazan:
-  - `https://api.aladhan.com/v1/timingsByCity`
-
-## Konfigurasyon
-Tum ayarlar: `metro_display/config.py`
-
-Temel:
-- `STATION_NAME`
-- `TIMEZONE`
-- `REFRESH_SECONDS`
-- `DEPARTURES_PER_DIRECTION`
-- `LOOKAHEAD_MINUTES`
-
-Canli/Fallback:
-- `USE_LIVE_SOURCES`
-- `LIVE_FALLBACK_TO_GTFS`
-- `SHOW_STATUS_NOTE`
-- `ALLOW_CALENDAR_FALLBACK`
-- `CALENDAR_FALLBACK_DAYS`
-
-Ramazan:
-- `SHOW_RAMADAN_PANEL`
-- `RAMADAN_TARGET_DATE`
-- `RAMADAN_CITY` / `RAMADAN_COUNTRY` / `RAMADAN_METHOD`
-
-Desktop UI (1024x600):
-- `DESKTOP_WIDTH` / `DESKTOP_HEIGHT`
-- `DESKTOP_FULLSCREEN`
-- `DESKTOP_FONT_FAMILY`
-- `DESKTOP_SHOW_TIME_AFTER_MINUTES` (`30` ise 31+ dk satirlarinda dakika yerine `HH:MM` gosterir)
-
-Terminal UI:
-- `TERMINAL_WIDTH`
-- `TERMINAL_LABEL_WIDTH`
-- `TERMINAL_USE_UNICODE`
-- `TERMINAL_SECTION_PADDING`
-
-## SSS / Sorun Giderme
-
-`ModuleNotFoundError: No module named '_tkinter'`
-- `python-tk` kur:
-  - macOS: `brew install python-tk@3.11`
-  - Linux: `sudo apt install python3-tk`
-- Sonra `.venv` ile calistir:
 ```bash
-source .venv/bin/activate
-python -m metro_display.desktop
+journalctl -u metro-display.service -f
 ```
 
-`PIL` hatasi:
+## Konfigürasyon Özeti
+Tüm ayarlar: `metro_display/config.py`
+
+- Genel: `STATION_NAME`, `TIMEZONE`, `REFRESH_SECONDS`
+- Canlı/Fallback: `USE_LIVE_SOURCES`, `LIVE_FALLBACK_TO_GTFS`, `SHOW_STATUS_NOTE`
+- Hatlar: `LINES`, `stop_ids`, `route_keywords`, `headsign_keywords`
+- Desktop: `DESKTOP_WIDTH`, `DESKTOP_HEIGHT`, `DESKTOP_FULLSCREEN`
+- Ramazan: `SHOW_RAMADAN_PANEL`, `RAMADAN_TARGET_DATE`
+
+## Sorun Giderme
+
+`No module named metro_display.desktop`:
+
 ```bash
-source .venv/bin/activate
-pip install -r metro_display/requirements.txt
+cd /home/yusuf/Desktop/m4_marmaray_timeline
+PYTHONPATH="$PWD" .venv/bin/python -c "import metro_display.desktop; print('ok')"
 ```
 
-`No module named metro_display.desktop`
-- Proje kokunden calistir: `cd /home/yusuf/Desktop/m4_marmaray_timeline`
-- Paket gorunurlugunu dogrula:
+`_tkinter` hatası:
+
 ```bash
-PYTHONPATH="$(pwd)" .venv/bin/python -c "import metro_display.desktop; print('ok')"
+sudo apt install -y python3-tk
 ```
 
-GTFS cache sifirlama:
-```bash
-rm -f metro_display/data/gtfs.zip
-source .venv/bin/activate
-python -m metro_display.terminal
-```
-
-## Proje Yapisi
-- `metro_display/app.py`: model uretimi ve ana dongu
-- `metro_display/live_sources.py`: canli M4/Marmaray toplayici
-- `metro_display/ramadan.py`: imsak/iftar panel verisi
-- `metro_display/desktop.py`: 1024x600 dashboard UI
+## Proje Yapısı
+- `metro_display/app.py`: model üretimi ve ana döngü
+- `metro_display/live_sources.py`: canlı kaynak toplayıcı
+- `metro_display/ramadan.py`: imsak/iftar verisi
+- `metro_display/desktop.py`: 1024x600 dashboard/kiosk UI
 - `metro_display/terminal.py`: terminal UI
-- `metro_display/render/`: PNG/E-Ink cizim
 - `metro_display/gtfs/`: GTFS indirme/import
+- `metro_display/render/`: PNG/E-Ink render

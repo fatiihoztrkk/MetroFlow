@@ -1,14 +1,18 @@
 [Unit]
-Description=Metro Display
-After=network-online.target
+Description=Metro Display Desktop
+After=graphical.target network-online.target
 Wants=network-online.target
 
 [Service]
+Type=simple
 User=pi
-WorkingDirectory=/home/pi/metro_display
-ExecStart=/usr/bin/python3 /home/pi/metro_display/app.py
+WorkingDirectory=/home/pi/Desktop/m4_marmaray_timeline
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+Environment=PYTHONPATH=/home/pi/Desktop/m4_marmaray_timeline
+ExecStart=/home/pi/Desktop/m4_marmaray_timeline/.venv/bin/python -m metro_display.desktop
 Restart=always
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
