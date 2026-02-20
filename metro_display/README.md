@@ -50,3 +50,4 @@ PYTHONPATH="$(pwd)" .venv/bin/python -m metro_display.desktop
 ## Notlar
 - Bu paket `urllib` kullandigi icin `requests` gerekmez.
 - `tkinter` pip paketi degildir; sistemden kurulmalidir.
+- Desktop modda kiosk acilis vardir: fare gizlenir, `Esc` fullscreen cikis, `q` uygulama cikis.

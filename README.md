@@ -83,7 +83,8 @@ metro_display/data/last.png
 
 ## Kisa Kontroller
 - `F11`: fullscreen ac/kapat (desktop mod)
-- `Esc` veya `q`: cikis
+- `Esc`: kiosk/tam ekrandan cik
+- `q`: uygulamayi kapat
 
 ## Veri Kaynaklari
 - M4:

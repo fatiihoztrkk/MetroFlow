@@ -258,17 +258,21 @@ class DesktopBoard:
         self.root.configure(bg=config.DESKTOP_BG_COLOR)
         self.root.geometry(f"{config.DESKTOP_WIDTH}x{config.DESKTOP_HEIGHT}")
         self.root.minsize(min(640, config.DESKTOP_WIDTH), min(360, config.DESKTOP_HEIGHT))
-        self.root.bind("<Escape>", lambda _e: self.root.destroy())
+        self._is_fullscreen = False
+        self._is_kiosk = False
+        self.root.bind("<Escape>", self._exit_fullscreen)
         self.root.bind("q", lambda _e: self.root.destroy())
         self.root.bind("<F11>", self._toggle_fullscreen)
+        self.root.bind("<FocusIn>", self._on_focus_in)
+        self.root.bind("<FocusOut>", self._on_focus_out)
 
-        if config.DESKTOP_FULLSCREEN:
-            try:
-                self.root.attributes("-fullscreen", True)
-            except tk.TclError:
-                pass
-
-        self.canvas = tk.Canvas(self.root, bg=config.DESKTOP_BG_COLOR, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(
+            self.root,
+            bg=config.DESKTOP_BG_COLOR,
+            highlightthickness=0,
+            bd=0,
+            cursor="none",
+        )
         self.canvas.pack(fill=tk.BOTH, expand=True)
         self.canvas.bind("<Configure>", self._on_resize)
 
@@ -280,10 +284,68 @@ class DesktopBoard:
             footer_lines=[],
         )
         self._refresh_inflight = False
+        if config.DESKTOP_FULLSCREEN:
+            self._enter_fullscreen(kiosk=True)
+        self._apply_cursor(hidden=True)
+
+    def _apply_cursor(self, hidden: bool):
+        cursor = "none" if hidden else ""
+        try:
+            self.root.configure(cursor=cursor)
+        except tk.TclError:
+            pass
+        try:
+            self.canvas.configure(cursor=cursor)
+        except tk.TclError:
+            pass
+
+    def _enter_fullscreen(self, kiosk: bool = True):
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        self.root.geometry(f"{screen_w}x{screen_h}+0+0")
+        try:
+            self.root.attributes("-fullscreen", True)
+        except tk.TclError:
+            pass
+        if kiosk:
+            try:
+                self.root.overrideredirect(True)
+            except tk.TclError:
+                pass
+        self._is_fullscreen = True
+        self._is_kiosk = kiosk
+        self._apply_cursor(hidden=True)
+
+    def _exit_fullscreen(self, _event=None):
+        if not self._is_fullscreen:
+            return "break"
+        try:
+            self.root.overrideredirect(False)
+        except tk.TclError:
+            pass
+        try:
+            self.root.attributes("-fullscreen", False)
+        except tk.TclError:
+            pass
+        self.root.geometry(f"{config.DESKTOP_WIDTH}x{config.DESKTOP_HEIGHT}+40+40")
+        self._is_fullscreen = False
+        self._is_kiosk = False
+        self._apply_cursor(hidden=False)
+        return "break"
 
     def _toggle_fullscreen(self, _event=None):
-        current = bool(self.root.attributes("-fullscreen"))
-        self.root.attributes("-fullscreen", not current)
+        if self._is_fullscreen:
+            return self._exit_fullscreen()
+        self._enter_fullscreen(kiosk=True)
+        return "break"
+
+    def _on_focus_in(self, _event=None):
+        self._apply_cursor(hidden=True)
+
+    def _on_focus_out(self, _event=None):
+        if self._is_fullscreen:
+            return
+        self._apply_cursor(hidden=False)
 
     def _font(self, size: int, weight: str = "normal"):
         return (config.DESKTOP_FONT_FAMILY, size, weight)
