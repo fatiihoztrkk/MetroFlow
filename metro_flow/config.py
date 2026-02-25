@@ -43,6 +43,8 @@ LIVE_DAY_WRAP_THRESHOLD_MINUTES = 180
 # Metro Istanbul (M4)
 M4_TIMETABLE_PAGE_URL = "https://www.metro.istanbul/SeferDurumlari/SeferDetaylari"
 M4_TIMETABLE_AJAX_URL = "https://www.metro.istanbul/SeferDurumlari/AJAXSeferGetir"
+M4_TIMETABLE_MODE = "auto"  # "auto" | "live" | "planned"
+M4_LIVE_GAP_USE_PLANNED_MINUTES = 8  # In auto mode, use planned if live starts this much later.
 
 # TCDD Marmaray
 MARMARAY_TIMETABLE_PAGE_URL = "https://www.tcddtasimacilik.gov.tr/marmaray/tr/gunluk_tren_saatleri"

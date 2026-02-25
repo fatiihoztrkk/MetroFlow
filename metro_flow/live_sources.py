@@ -208,36 +208,77 @@ def _m4_direction_departures(now, payload: dict, limit: int) -> List[Departure]:
     return _sort_and_dedupe(out, limit)
 
 
-def fetch_m4_departures(now, station_name: str, limit: int) -> Dict[str, List[Departure]]:
-    """Returns keys: kadikoy, sabiha."""
-    meta = _get_m4_meta(station_name)
-    common_fields = {
-        "secim": "1",
+def _m4_fetch_route_departures(now, meta: Dict[str, str], route_id: str, limit: int, secim: str) -> List[Departure]:
+    fields = {
+        "secim": secim,
         "saat": "",
         "dakika": "",
         "tarih1": "",
         "tarih2": "",
         "station": meta["station_id"],
+        "route": route_id,
         "kod": meta["kod"],
     }
+    if secim == "2":
+        fields["saat"] = f"{now.hour:02d}"
+        fields["dakika"] = f"{now.minute:02d}"
+        fields["tarih1"] = now.strftime("%d.%m.%Y")
 
+    payload = _http_post_multipart_json(
+        config.M4_TIMETABLE_AJAX_URL,
+        fields,
+        headers={"Accept": "application/json"},
+    )
+    return _m4_direction_departures(now, payload, limit)
+
+
+def _select_m4_departures(live_departures: List[Departure], planned_departures: List[Departure]) -> List[Departure]:
+    mode = str(getattr(config, "M4_TIMETABLE_MODE", "auto") or "auto").strip().lower()
+
+    if mode == "planned":
+        return planned_departures or live_departures
+    if mode == "live":
+        return live_departures or planned_departures
+
+    if not live_departures:
+        return planned_departures
+    if not planned_departures:
+        return live_departures
+
+    gap_threshold = int(getattr(config, "M4_LIVE_GAP_USE_PLANNED_MINUTES", 8))
+    live_first = live_departures[0].minutes
+    planned_first = planned_departures[0].minutes
+    if live_first - planned_first >= gap_threshold:
+        return planned_departures
+    return live_departures
+
+
+def fetch_m4_departures(now, station_name: str, limit: int) -> Dict[str, List[Departure]]:
+    """Returns keys: kadikoy, sabiha."""
+    meta = _get_m4_meta(station_name)
     out: Dict[str, List[Departure]] = {}
+    mode = str(getattr(config, "M4_TIMETABLE_MODE", "auto") or "auto").strip().lower()
+    need_live = mode in ("auto", "live")
+    need_planned = mode in ("auto", "planned")
+
     route_map = {
         "sabiha": meta["route_to_sabiha"],
         "kadikoy": meta["route_to_kadikoy"],
     }
     for key, route_id in route_map.items():
-        fields = dict(common_fields)
-        fields["route"] = route_id
+        live_departures: List[Departure] = []
+        planned_departures: List[Departure] = []
+
         try:
-            payload = _http_post_multipart_json(
-                config.M4_TIMETABLE_AJAX_URL,
-                fields,
-                headers={"Accept": "application/json"},
-            )
-            out[key] = _m4_direction_departures(now, payload, limit)
+            if need_live:
+                live_departures = _m4_fetch_route_departures(now, meta, route_id, limit, secim="1")
+            if need_planned:
+                planned_departures = _m4_fetch_route_departures(now, meta, route_id, limit, secim="2")
         except Exception:  # noqa: BLE001
-            out[key] = []
+            out[key] = live_departures or planned_departures
+            continue
+
+        out[key] = _select_m4_departures(live_departures, planned_departures)
     return out
 
 

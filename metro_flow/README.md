@@ -42,6 +42,8 @@ PYTHONPATH="$(pwd)" .venv/bin/python -m metro_flow.desktop
 ## Ana Ayarlar (`config.py`)
 - Genel: `STATION_NAME`, `TIMEZONE`, `REFRESH_SECONDS`
 - Canli/Fallback: `USE_LIVE_SOURCES`, `LIVE_FALLBACK_TO_GTFS`, `SHOW_STATUS_NOTE`
+- M4 kaynak secimi: `M4_TIMETABLE_MODE` (`auto`/`live`/`planned`)
+- M4 auto esik: `M4_LIVE_GAP_USE_PLANNED_MINUTES`
 - Ramazan: `SHOW_RAMADAN_PANEL`, `RAMADAN_TARGET_DATE`
 - Desktop: `DESKTOP_WIDTH`, `DESKTOP_HEIGHT`, `DESKTOP_FULLSCREEN`, `DESKTOP_FONT_FAMILY`
 - Desktop: `DESKTOP_SHOW_TIME_AFTER_MINUTES` (ornek: `30`)
